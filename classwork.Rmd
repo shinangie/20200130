@@ -7,10 +7,101 @@ output: html_document
 ```{r setup, include=F}
 knitr::opts_chunk$set(echo = F)
 library(tidyverse)
+library(gov.1005.data)
+```
+
+```{r 02-06}
+
+```
+
+```{r 02-04}
+# libraries: tidyverse, gov.1005.data
+
+data(congress)
+
+# peruse data.
+
+head(congress)
+glimpse(congress)
+summary(congress)
+
+  # find the oldest member in congress.
+
+congress %>% 
+  arrange(desc(age)) %>% 
+  head(1)
+
+congress %>% 
+  filter(party %in% c("R", "D")) %>% 
+  group_by(year, party) %>% 
+  summarize(avg_age = mean(age)) %>% 
+  ggplot(aes(year, avg_age, color = party)) + 
+  geom_line()
 ```
 
 ```{r 01-30}
-# libraries used: tidyverse
+# libraries: tidyverse
 
-x <- read_csv(file = url("http://bit.ly/2UecjN7"))
+x <- read_csv(file = url("http://bit.ly/2UecjN7"),
+              col_types = cols(name = col_character(),
+                               course = col_character(),
+                               department = col_character(),
+                               overall = col_double(),
+                               workload = col_double(),
+                               number = col_double()))
+
+# peruse data.
+
+head(x)
+glimpse(x)
+
+  # find the course with the least workload.
+
+x %>% 
+  arrange(workload) %>% 
+  head(1)
+# answer: psy 1
+
+  # find the course with the most workload.
+
+x %>% 
+  arrange(desc(workload)) %>% 
+  head(1)
+# answer: math 55a
+
+  # find the highest-rated course in economics.
+
+x %>% 
+  filter(department == "Economics") %>% 
+  arrange(desc(overall)) %>% 
+  head(1)
+# answer: econ 1342
+
+  # find the highest-rated course with more than 40 students.
+
+x %>% 
+  filter(number >= 40) %>% 
+  arrange(desc(overall)) %>% 
+  head(1)
+# answer: japan ba 003
+
+  # make a histogram of x.
+
+ggplot(data = x,
+       mapping = aes(x = workload)) +
+  geom_histogram(bins = 30)
+# think: what does this tell you about the courses at harvard college?
+
+  # how many classes have under 5 hours of work/week?
+
+x %>% 
+  count(workload < 5)
+# answer: 63
+
+  # graph the relationship between course workload and its q score.
+
+ggplot(x, aes(x = workload, y = overall)) +
+  geom_point() +
+  geom_smooth()
+# think: what does this indicate?
 ```

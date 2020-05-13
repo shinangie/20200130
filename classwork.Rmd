@@ -1,0 +1,16 @@
+---
+title: "Classwork"
+subtitle: "Gov 1005 Spring 2020"
+output: html_document
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F)
+library(tidyverse)
+```
+
+```{r 01-30}
+# libraries used: tidyverse
+
+x <- read_csv(file = url("http://bit.ly/2UecjN7"))
+```

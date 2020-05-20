@@ -8,10 +8,40 @@ output: html_document
 knitr::opts_chunk$set(echo = F)
 library(tidyverse)
 library(gov.1005.data)
+library(janitor)
+library(reprex)
+library(readxl)
+library(gt)
 ```
 
-```{r 02-06}
+```{r 02-18}
+# libraries: 
 
+```
+
+```{r 02-13}
+# libraries: readxl, janitor, tidyverse, gt
+
+# peruse and clean data.
+
+x <- read_excel("raw-data/class_enrollment_summary_by_term_2.13.20.xlsx", 
+                skip = 3) %>%
+	clean_names() %>% 
+  filter(!is.na(course_name))
+
+  # find the top five 
+
+x %>% 
+  filter(course_department == "Government") %>%
+  arrange(desc(total)) %>%
+  slice(1:5) %>% 
+  arrange(-u_grad) %>% 
+  slice(1:5) %>% 
+  gt() %>% 
+  tab_header(title = "Top Five Government Classes") %>% 
+  cols_label(course_title = "Course Title",
+             course_name = "Course Name",
+             u_grad = "Number of Undergrads")
 ```
 
 ```{r 02-04}

@@ -12,11 +12,602 @@ library(janitor)
 library(reprex)
 library(readxl)
 library(gt)
+library(tidycensus)
+library(googlesheets4)
+library(sf)
+library(infer)
+library(broom)
+library(babynames)
+library(gganimate)
+```
+
+```{r 04-23}
+```
+
+```{r 04-21}
+```
+
+```{r 04-16}
+```
+
+```{r 04-14}
+```
+
+```{r 04-09}
+# libraries: tidyverse
+
+model_1 <- lm(earnings ~ sat + faculty, data = college)
+model_1 %>% tidy()
+ 
+# observe model data of the relationship between earnings and sat + faculty.
+ 
+predict(model_1, newdata = tibble(faculty = 50, sat = 1200))
+
+augment(model_1, data = college) %>%
+  select(name, earnings, sat, faculty, .fitted, .resid) %>%
+  arrange(desc(.resid))
+
+# look at the modelling without interaction term.
+
+lm(earnings ~ public + price, data = x)
+ 
+# Interaction between public and price
+
+model_2 <- lm(earnings ~ public + price + price:public, data = college)
+ 
+# use tidy to find confidence intervals.
+
+model_2 %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
+
+college %>%
+  rep_sample_n(size = nrow(college), reps = 1000, replace = TRUE) %>%
+  group_by(replicate) %>%
+  nest() %>%
+  mutate(mod = map(data, ~lm(earnings ~ public + price + public*price, data = .)),
+         reg_results = map(mod, ~tidy(.))) %>%
+  unnest(reg_results) %>%
+  group_by(term) %>% 
+  summarize(conf.low = quantile(estimate, .025), 
+            perc.50 = quantile(estimate, 0.5),
+            conf.high = quantile(estimate, .975))
+```
+
+```{r 04-07}
+# libraries: tidyverse
+
+  # read in and peruse the data.
+
+college <- read_rds("raw-data/college.rds")
+
+glimpse(college)
+sample_n(college, 10, replace = FALSE)
+skim(college) 
+view(college)
+
+arrange(college, desc(earnings)) 
+summarize(college, correlation = cor(faculty, earnings))
+summarize(college, correlation = cor(sat, earnings))
+
+  # find the correlation using a correlation matrix.
+
+college %>%
+	select(sat, earnings, faculty) %>%
+	cor()
+
+  # make ggplots of the correlation relationships.
+
+college %>% 
+  ggplot(aes(faculty, earnings)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+    labs(x = "Average Faculty Salary", 
+         y = "2011 Median Income of Students",
+         title = "Income of Students based on Average Faculty Salaries at their University")
+
+college %>% 
+  ggplot(aes(sat, earnings)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+    labs(x = "Average SAT Score",  
+	       y = "2011 Median Income of Students",
+         title = "Income of Students based on Average SAT Scores at their University")
+
+  # calculate a regression model and its findings.
+
+school_model <- lm(earnings ~ sat + faculty, data = college)
+
+school_model %>%
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
+```
+
+```{r 04-02}
+# libraries: tidyverse, broom, babynames, gganimate
+
+  # create a linear regression model for poverty and less_than_hs from the county dataset.
+
+county <- read_rds("raw-data/county.rds")
+
+poverty_model <- county %>%
+  lm(poverty ~ less_than_hs, data = .)
+
+poverty_model %>%
+  tidy(conf.int = TRUE)
+
+  # create a bootstrapped sample of county with 3 replicates.
+
+county_bootstrap <- county %>%
+  rep_sample_n(size = nrow(county), replace = TRUE, reps = 3) %>%
+  group_by(replicate) %>%
+  nest()
+
+county_bootstrap %>%
+  mutate(distinct_rows = map_dbl(data, ~ n_distinct(.)))
+
+  # find the mod column.
+
+updated_table <- county_bootstrap %>%
+  mutate(mod = map(data, ~ lm(poverty ~ less_than_hs, data = .))) %>%
+  mutate(reg_results = map(mod, ~ tidy(.))) %>%
+  mutate(disp_coef = map_dbl(reg_results, ~ filter(., term == "less_than_hs") %>%
+                               pull(estimate))) %>%
+  pull(disp_coef) %>%
+  quantile(c(0.025, 0.5, 0.975))
+
+babynames %>%
+  filter(name %in% c("Elizabeth", "Jane", "Katherine", "Lydia", "Mary"),
+     	sex == "F") %>%
+  ggplot(aes(year, n, color = name, size = prop)) +
+  geom_line() +
+  geom_point() +
+  transition_reveal(year) +
+  ylab("Number of babies born") +
+  labs(title = "Popularity of American names in the previous 140 years",
+   	color = "Name",
+   	size = "Proportion") +
+  xlab("Year")
+```
+
+```{r 03-31}
+# libraries: gov.1005.data, tidyverse
+
+  # peruse data.
+
+county
+glimpse(county)
+summary(county)
+county %>%
+  select(poverty, less_than_hs) %>%
+  skim()
+
+  # find the average poverty rate in the u.s.
+
+county %>% 
+  summarise(avg_pov = mean(poverty))
+
+  # find the poverty rate of middlesex county.
+
+county %>% 
+  filter(name %in% "Middlesex County",
+         state == "MA") %>%
+  select(poverty)
+
+  # find the average percent of adults with and without a high school diploma.
+
+county %>% 
+  summarize(avg_no_hdiploma = mean(less_than_hs),
+            avg_no_hdiploma = mean(hs))
+
+  # find the state with the highest percentage of adults with less than a high school diploma.
+
+county %>%
+  arrange(desc(less_than_hs)) %>%
+  head(1) %>%
+  select(state)
+
+  # find the correlation between poverty and less_than_hs.
+
+county %>% 
+  summarize(correlation = cor(poverty, less_than_hs))
+
+  # visualize!
+
+county %>%
+  ggplot(aes(less_than_hs, poverty)) +
+  geom_point() +
+  labs(x = "Percent of Adults with Less than a High School Diploma", 
+       y = "Percent of County in Poverty",
+       title = "Poverty Rate and Education in US Counties",
+       subtitle = "Counties with less education have more poverty",
+       caption = "Source: https://www.ers.usda.gov/data-products/county-level-data-sets") +
+  geom_smooth(method = "lm", se = FALSE) 
+
+county %>%
+  ggplot(aes(less_than_hs, poverty, color = region)) +
+  geom_point() +
+  labs(x = "Percent of Adults with Less than a High School Diploma",
+       y = "Percent of Poverty",
+       title = "Scatterplot of relationship of education level and poverty rates") + 
+  transition_manual(region)
+
+county %>% 
+  mutate(good_education = ifelse(less_than_hs < 13, 1, 0)) %>% 
+  group_by(good_education) %>% 
+  summarize(avg_poverty = mean(poverty))
+```
+
+```{r 03-26}
+# libraries: gov.1005.data, tidyverse, infer
+
+  # calculate the average att_start, att_end, and att_chg for each treatment group.
+
+train %>% 
+  group_by(treatment) %>% 
+  summarise(avg_att_start = mean(att_start),
+            avg_att_end = mean(att_end),
+            avg_att_chg = mean(att_chg)) %>% 
+  pivot_wider(names_from = treatment, values_from = avg_att_chg ) %>% 
+  mutate(att_chg_diff = Treated - Control) %>% 
+  select(att_chg_diff, everything())
+
+  # calculate the 99% confidence interval for the difference in means between the treated and the controls.
+
+train %>% 
+  rep_sample_n(size = nrow(.), replace = TRUE, reps = 1000) %>% 
+  group_by(replicate, treatment) %>% 
+  summarise(avg_att_chg = mean(att_chg)) %>% 
+  pivot_wider(id_cols = replicate, names_from = treatment, values_from = avg_att_chg ) %>% 
+  mutate(att_chg_diff = Treated - Control) %>% 
+  ungroup() %>% 
+  summarize(lower = quantile(att_chg_diff, probs = c(0.005)),
+            median = quantile(att_chg_diff, probs = c(0.5)),
+            upper = quantile(att_chg_diff, probs = c(0.995)))
+
+  # make a scatterplot that shows treatment indicators and attitude change.
+
+train %>% 
+  ggplot(aes(x = treatment, y = att_chg)) +
+    geom_jitter(width = 0.02) +
+    labs(title = "Changes in Attitude Toward Immigration Among Boston Commuters",
+         subtitle = "Exposure to Spanish-speakers makes people more conservative",
+         x = "Treatment (exposure to Spanish-speakers) versus Control",
+         y = "Change in Attitude Toward Immigration")
+```
+
+```{r 03-24}
+# libraries: gov.1005.data, tidyverse, infer
+
+  # make a histogram of income.
+
+train %>%
+  ggplot(aes(income)) + geom_histogram()
+
+  # find the average income.
+
+train %>% 
+  summarize(avg_income = mean(income))
+
+  # create a bootstrapped sample of 1000 replicates of the average income. have each replicate draw the appropriate number with replacement.
+
+train %>%
+  rep_sample_n(115, replace = TRUE, reps = 1000) %>%
+  group_by(replicate) %>%
+  summarize(mean_income = mean(income))
+
+  # calculate the (center) 50% confidence interval.
+
+train %>% 
+  rep_sample_n(size = 115, replace = TRUE, reps = 1000) %>%
+  group_by(replicate) %>%
+  summarize(avg_inc = mean(income)) %>%
+  pull(avg_inc) %>%
+  quantile(c(0.25, 0.75))
+
+  # find the difference between the income of treated and control commuters in our sample.
+
+diff <- train %>%
+  rep_sample_n(115, replace = TRUE, reps = 1000) %>%
+  group_by(treatment) %>%
+  summarize(mean_income = mean(income)) %>%
+  pivot_wider(names_from = treatment, 
+              values_from = mean_income) %>%
+  mutate(diff = Treated - Control)
+
+  # calculate a 95% confidence interval for the difference between the mean income of treated and control commuters in our sample.
+
+diff %>%
+  pull(diff) %>%
+  quantile(c(0.025, 0.975))
+
+  # calculate the mean difference.
+
+train %>%
+  rep_sample_n(115, replace = TRUE, reps = 1000) %>%
+  group_by(treatment) %>%
+  summarize(mean_att_chg = mean(att_chg)) %>%
+  pivot_wider(names_from = treatment, values_from = mean_att_chg) %>%
+  mutate(diff = Treated - Control)
+```
+
+```{r 03-10}
+# libraries: gov.1005.data, tidyverse, infer
+
+  # peruse the "trains" data.
+
+glimpse(train)
+summary(train)
+# the train table looks at data from 115 individuals on a train platform and who may overhear others speaking spanish.
+# the treatment column refers to the conditions of the participants. treated means they were on the platform and individuals spoke spanish next to them. control means that no one was in their vicinity.
+
+  # find the average income for the treatment group.
+
+train %>%
+  filter(treatment == "Treated") %>%
+  summarize(avg_inc = mean(income))
+
+conf_int <- train %>%
+  filter(treatment == "Treated") %>%
+  rep_sample_n(size = 51, replace = TRUE, reps = 1000) %>%
+  group_by(replicate) %>%
+  summarize(avg_inc = mean(income)) %>%
+  pull(avg_inc) %>%
+  quantile(c(0.025, 0.975))
+
+difference <- train %>%
+  group_by(treatment) %>%
+  summarize(avg_inc = mean(income)) %>%
+  pivot_wider(1:2, names_from = treatment, values_from = avg_inc) %>%
+  mutate(difference = Treated - Control)
+```
+
+```{r 03-05}
+# libraries: googlesheets4, janitor, infer, tidyverse
+
+  # read in and graph data.
+
+sheets_deauth()
+
+color <- read_sheet("14HmwN2cEVAJHupuehCuLdwG9BXtR3COrxDgaaylLhkA") %>%
+  clean_names() %>%
+  mutate(perc_red = red/(red + white))
+
+color %>%
+  ggplot(aes(x = perc_red)) + 
+  geom_histogram(binwidth = 0.04) +
+  labs(title = "Percentage of Red Beads Drawn",
+       subtitle = "Should we be suspicious of those outliers?",
+       caption = "Classroom data from 2020-03-03",
+       x = "Percentage of Red Beads Out of 25 Drawn",
+       y = "Count")
+
+  # run a simulation to test the data.
+
+my_urn <- tibble(bean_ID = 1:10000, 
+              color = c(rep("Red", 2000), rep("White", 8000)))
+
+my_urn %>%
+  rep_sample_n(size = 25, reps = 1) %>%
+  group_by(replicate) %>%
+  summarise(red_sum = sum(color == "Red")) %>%
+  mutate(perc_red = red_sum / 25)
+
+  # make a function for the simulation.
+
+simulate_class <- function(urn){
+  urn %>%
+  rep_sample_n(size = 25, reps = 51) %>%
+  group_by(replicate) %>%
+  summarise(red_sum = sum(color == "Red")) %>%
+  mutate(perc_red = red_sum / 25)
+}
+
+sim_results <- tibble(sim_id = 1:3, 
+                      results = map(sim_id, ~ simulate_class(my_urn)))
+
+  # make another histogram.
+
+str(sim_results)
+view(sim_results) 
+
+sim_results[[2]][[2]] %>%
+  ggplot(aes(perc_red)) + 
+  geom_histogram(binwidth = 0.04) +
+  labs(title = "Percentage of Red Beads Drawn",
+       subtitle = "Should we be suspicious of those outliers?",
+       caption = "Virtual Simulation of classroom data",
+       x = "Percentage of Red Beads Out of 25 Drawn",
+       y = "Count")
+```
+
+```{r 03-03}
+# libraries: tidyverse, googlesheets4, sf
+
+# use download.file to read in data. peruse with janitor.
+
+url_current <- "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_2.25.20_0.xlsx"
+
+url_old <- "https://registrar.fas.harvard.edu/files/fas-registrar/files/class_enrollment_summary_by_term_3.22.19_0.xlsx"
+
+download.file(url = url_current,
+              destfile = "current.xlsx")
+
+download.file(url = url_old,
+              destfile = "old.xlsx")
+
+current <- read_excel("current.xlsx", skip = 3) %>%
+  clean_names() %>%
+  filter(!is.na(course_name))
+
+old <- read_excel("old.xlsx", skip = 3) %>%
+  clean_names() %>%
+  filter(!is.na(course_name)) %>%
+  select(course_id)
+
+enrollment_5 <- anti_join(current, old, by = "course_id")
+
+  # find the top five most popular classes that were offered both last and this year in the spring.
+
+enrollment_5 %>% 
+  arrange(desc(total)) %>%
+  select(course_name, total) %>%
+  slice(1:5)
+
+# use the googlesheets4 library to read in sampling data.
+
+sheets_deauth()
+
+beads <- read_sheet("https://docs.google.com/spreadsheets/d/14HmwN2cEVAJHupuehCuLdwG9BXtR3COrxDgaaylLhkA/edit#gid=0") %>%
+  clean_names()
+
+beads %>% 
+  group_by(partners) %>% 
+  summarize(percent_red = red/(25)) %>% 
+  ggplot(aes(percent_red)) +
+  geom_histogram(bins = 20)
+```
+
+```{r 02-27}
+# continued from 02-25
+
+  # create a table that stores the results of random rolls. add columns to check if either of them "rolled craps" (rolled a 7 or 11).
+
+dice_2 <- tibble(p_IB = map_int(1:3, ~ roll_two_dice()),
+                 p_JM = map_int(1:3, ~ roll_two_dice())) %>% 
+  mutate(IB_craps = p_IB %in% c(7, 11),
+         JM_craps = p_JM %in% c(7, 11),
+         winner = case_when(IB_craps > JM_craps ~ "IB",
+                            JM_craps > IB_craps ~ "JM",
+                            TRUE ~ "Tie"))
+
+  # create a similar table to above but with the flexibility of number of contests and contest size.
+
+contest_size <- 6
+number_of_contests <- 2
+n <- contest_size * number_of_contests
+
+dice_3 <- tibble(p_IB = map_int(1:n, ~ roll_two_dice()),
+                 p_JM = map_int(1:n, ~ roll_two_dice())) %>% 
+          mutate(IB_craps = p_IB %in% c(7, 11),
+                 JM_craps = p_JM %in% c(7, 11),
+                 winner = case_when(IB_craps > JM_craps ~ "IB",
+                                    JM_craps > IB_craps ~ "JM",
+                                    TRUE ~ "Tie"))
+
+  # use the rep function to simulate 1000 contests. 
+
+contest_size_2 <- 6
+number_of_contests_2 <- 1000
+n_2 <- contest_size_2 * number_of_contests_2
+
+dice_3 <- tibble(p_IB = map_int(1:n_2, ~ roll_two_dice()),
+                 p_JM = map_int(1:n_2, ~ roll_two_dice())) %>% 
+          mutate(IB_craps = p_IB %in% c(7, 11),
+                 JM_craps = p_JM %in% c(7, 11),
+                 winner = case_when(IB_craps > JM_craps ~ "IB",
+                                    JM_craps > IB_craps ~ "JM",
+                                    TRUE ~ "Tie"),
+                 contest = rep(1:number_of_contests_2, each = contest_size_2))
+
+  # summarize results.
+
+dice_3 %>% 
+  group_by(contest) %>% 
+  summarize(JM_wins = sum(winner == "JM"),
+            IB_wins = sum(winner == "IB"),
+            ties = sum(winner == "Tie"))
+
+  # find out if John Mark was cheating.
+
+round(100*sum(dice_3$JM_wins >= 4)/1000, 3)
+```
+
+
+```{r 02-25}
+# libraries: tidyverse
+
+  # make a function that simulates a roll of one die.
+
+roll_one_die <- function(){
+  sample(x = 1:6, size = 1)
+}
+
+  # make a function that simulates a roll of a pair of die.
+
+roll_two_dice <- function(){
+  roll_one_die() + roll_one_die()
+}
+
+  # make a function that simulates ten rolls of a pair of die. use a map function!
+
+throw_10_dice <- function(){
+  map_int(1:10, ~roll_two_dice())
+}
+
+  # make a tibble using a map function of 100000 rolls of a pair of die. make a ggplot of the results.
+
+dice <- tibble(results = map_int(1:100000, ~ roll_two_dice()))
+
+ggplot(dice, aes(results)) + 
+  geom_bar() +
+  scale_x_continuous(breaks = seq(2:13))
+```
+
+```{r 02-20}
+# libraries: tidyverse, tidycensus
+
+# set a definition for the variables argument in get_acs.
+
+racevars <- c(White = "B02001_002",
+	      Black = "B02001_003",
+	      Hispanic = "B03003_003",
+	      Asian = "B02001_005")
+
+la <- get_acs(geography = "tract",
+	        variables = racevars,
+		year = 2018,
+		state = "CA",
+		county = "Los Angeles County",
+		geometry = TRUE,
+		summary_var = "B02001_001")	
+
+# make a map of your county!
+
+la %>% 
+  mutate(Percent = 100 * (estimate / summary_est)) %>%
+  ggplot(aes(fill = Percent, color = Percent)) +
+  facet_wrap(~ variable) +
+  geom_sf() +
+  scale_fill_viridis_c(direction = -1) +
+  scale_color_viridis_c(direction = -1) +
+  labs(title = "Racial geography of Los Angeles County, CA",
+       caption = "Source: American Community Survey 2014-2018") +
+  theme_void()
 ```
 
 ```{r 02-18}
-# libraries: 
+# libraries: readxl, janitor, tidyverse
 
+# read in and peruse data from both this spring and last spring semesters, for comparisons!
+
+enrollment_3 <- read_excel(path = "raw-data/class_enrollment_summary_by_term_2.18.20.xlsx",
+                         skip = 3) %>% 
+  clean_names() %>% 
+  filter(!is.na(course_name))
+
+enrollment_4 <- read_excel(path = "raw-data/class_enrollment_summary_by_term_3.22.19_0.xlsx",
+                         skip = 3) %>% 
+  clean_names() %>% 
+  filter(!is.na(course_name))
+
+# join them and look at the differences! what were the top five most popular classes that were offered for both semesters?
+
+anti_join(enrollment_4, enrollment_3, by = "course_name") %>% 
+  na.omit() %>% 
+  select(course_title, course_name, course_department, total) %>% 
+  arrange(desc(total)) %>% 
+  head(5) 
 ```
 
 ```{r 02-13}
@@ -24,14 +615,14 @@ library(gt)
 
 # peruse and clean data.
 
-x <- read_excel("raw-data/class_enrollment_summary_by_term_2.13.20.xlsx", 
+enrollment_2 <- read_excel("raw-data/class_enrollment_summary_by_term_2.13.20.xlsx", 
                 skip = 3) %>%
 	clean_names() %>% 
   filter(!is.na(course_name))
 
-  # find the top five 
+  # make a gt of the top five classes in harvard's government department.
 
-x %>% 
+enrollment_2 %>% 
   filter(course_department == "Government") %>%
   arrange(desc(total)) %>%
   slice(1:5) %>% 
@@ -72,7 +663,7 @@ congress %>%
 ```{r 01-30}
 # libraries: tidyverse
 
-x <- read_csv(file = url("http://bit.ly/2UecjN7"),
+enrollment <- read_csv(file = url("http://bit.ly/2UecjN7"),
               col_types = cols(name = col_character(),
                                course = col_character(),
                                department = col_character(),
@@ -82,26 +673,26 @@ x <- read_csv(file = url("http://bit.ly/2UecjN7"),
 
 # peruse data.
 
-head(x)
-glimpse(x)
+head(enrollment)
+glimpse(enrollment)
 
   # find the course with the least workload.
 
-x %>% 
+enrollment %>% 
   arrange(workload) %>% 
   head(1)
 # answer: psy 1
 
   # find the course with the most workload.
 
-x %>% 
+enrollment %>% 
   arrange(desc(workload)) %>% 
   head(1)
 # answer: math 55a
 
   # find the highest-rated course in economics.
 
-x %>% 
+enrollment %>% 
   filter(department == "Economics") %>% 
   arrange(desc(overall)) %>% 
   head(1)
@@ -109,28 +700,28 @@ x %>%
 
   # find the highest-rated course with more than 40 students.
 
-x %>% 
+enrollment %>% 
   filter(number >= 40) %>% 
   arrange(desc(overall)) %>% 
   head(1)
 # answer: japan ba 003
 
-  # make a histogram of x.
+  # make a histogram of enrollment.
 
-ggplot(data = x,
+ggplot(data = enrollment,
        mapping = aes(x = workload)) +
   geom_histogram(bins = 30)
 # think: what does this tell you about the courses at harvard college?
 
   # how many classes have under 5 hours of work/week?
 
-x %>% 
+enrollment %>% 
   count(workload < 5)
 # answer: 63
 
   # graph the relationship between course workload and its q score.
 
-ggplot(x, aes(x = workload, y = overall)) +
+ggplot(enrollment, aes(x = workload, y = overall)) +
   geom_point() +
   geom_smooth()
 # think: what does this indicate?

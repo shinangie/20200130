@@ -19,27 +19,128 @@ library(infer)
 library(broom)
 library(babynames)
 library(gganimate)
+library(tidymodels)
+library(rpart.plot)
+library(skimr)
+library(randomForest)
 ```
 
 ```{r 04-23}
 ```
 
 ```{r 04-21}
+
 ```
 
 ```{r 04-16}
+# libraries: tidyverse, rparts.plot, infer, randomForest
+
+nes
+
+  # set up a logistic_reg function, mod, fit and tidied data set.
+
+logistic_mod <- logistic_reg() %>%
+  set_engine("glm") 
+
+logistic_fit <- fit(logistic_mod,
+                    factor(dvote) ~ ideology + income + gender + race,
+                    data = nes)
+
+logistic_fit %>%
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
+
+  # set up a decision tree, mod, fit and tidied data set.
+
+tree_mod <- decision_tree() %>%
+  set_engine("rpart",
+             model = TRUE) %>%
+  set_mode("classification")
+
+house_region_tree <- fit(tree_mod,
+                         factor(dvote) ~ ideology + income + gender + race,
+                    data = nes)
+
+house_region_tree$fit %>%
+  prp(extra = 6, varlen = 0, faclen = 0)
+
+  # build a tibble and ggplot.
+
+forest_mod <- rand_forest() %>%
+  set_engine("randomForest") %>%
+  set_mode("classification")
+
+house_forest <- fit(forest_mod,
+                    factor(dvote) ~ ideology + income + gender + race,
+                    data = nes)
+
+tibble(error = house_forest$fit$err.rate[, "OOB"],
+       trees = 1:500) %>%
+  ggplot(aes(x = trees, y = error)) +
+  geom_line() +
+  theme_classic()
 ```
 
 ```{r 04-14}
+# libraries: tidyverse, tidymodels, rpart.plot
+
+  # read in and browse data!
+
+nes <- read_rds("raw-data/ch13_nes.rds")
+
+glimpse(nes)
+summary(nes)
+skim(nes)
+
+  # make a scatterplot and regression line.
+
+nes %>% 
+  ggplot(aes(x = income, y = dvote)) +
+	# use geom_point for results but use geom_jitter instead
+  # geom_point() +
+  geom_jitter(alpha = 0.2, height = 0.1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Income", y = "Preference for Democratic Candidate")
+
+  # fit a logistic regression model with the dependent variable as dvote, using gender and income as categorical variables. tidy data!
+
+model_1 <- glm(dvote ~ gender + income, family = "binomial", data = nes)
+
+model_1 %>% 
+  tidy(conf.int = T) %>%
+  select(term, estimate, conf.low, conf.high)
+
+  # get some predictions from our model.
+
+model_1 %>% augment(type.predict = "response", data = nes) %>%
+  select(dvote, income, gender, .fitted)
+
+  # plot fun things!
+
+nes %>% 
+  group_by(gender, year) %>%
+  summarize(pct_success = sum(dvote) / n()) %>% 
+  mutate(emp_logit = qlogis(pct_success)) %>% 
+  ggplot(aes(year, emp_logit)) +
+  geom_point() +
+  geom_smooth(method = lm) +
+  theme_classic() +
+  labs(
+    title = "Trends favoring the Democrats for both Male and Female",
+    x = "Year",
+    y = "Empirical logits") +
+  facet_wrap(~ gender)
 ```
 
 ```{r 04-09}
 # libraries: tidyverse
+  
+  # build a model and tidy it.
 
 model_1 <- lm(earnings ~ sat + faculty, data = college)
 model_1 %>% tidy()
  
-# observe model data of the relationship between earnings and sat + faculty.
+  # observe model data of the relationship between earnings and sat + faculty.
  
 predict(model_1, newdata = tibble(faculty = 50, sat = 1200))
 
@@ -47,19 +148,21 @@ augment(model_1, data = college) %>%
   select(name, earnings, sat, faculty, .fitted, .resid) %>%
   arrange(desc(.resid))
 
-# look at the modelling without interaction term.
+  # look at the modelling without interaction term.
 
 lm(earnings ~ public + price, data = x)
  
-# Interaction between public and price
+  # look at the interaction between public and price.
 
 model_2 <- lm(earnings ~ public + price + price:public, data = college)
  
-# use tidy to find confidence intervals.
+  # use tidy to find confidence intervals.
 
 model_2 %>% 
   tidy(conf.int = TRUE) %>%
   select(term, estimate, conf.low, conf.high)
+
+  # find the confidence interval.
 
 college %>%
   rep_sample_n(size = nrow(college), reps = 1000, replace = TRUE) %>%

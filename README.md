@@ -1,1 +1,2 @@
-# gov-1005-spring-2020
+# Coursework for Gov 1005: Data
+Spring 2020, using R

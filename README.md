@@ -1,2 +1,2 @@
-# R Coursework for GOV 1005: Data
-Spring 2020
+# coursework for gov 1005
+spring 2020
